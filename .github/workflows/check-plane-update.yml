@@ -1,0 +1,69 @@
+name: Check Plane MCP updates
+
+on:
+  schedule:
+    # Mondays, 03:17 UTC (11:17 China Standard Time).
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: plane-mcp-update
+  cancel-in-progress: false
+
+jobs:
+  check-update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the default branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+
+      - name: Test version selection and update boundaries
+        run: uv run --python 3.12 --with packaging==26.3 python -m unittest discover -s tests -v
+
+      - name: Check PyPI and update the server pin
+        id: update
+        run: uv run --locked --python 3.12 .github/scripts/check_plane_update.py --apply --github-output "$GITHUB_OUTPUT"
+
+      - name: Create or update the upgrade pull request
+        if: steps.update.outputs.update_available == 'true'
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: automation/plane-mcp-update
+          base: ${{ github.event.repository.default_branch }}
+          add-paths: skills/plane-mcp/scripts/plane.py
+          commit-message: "chore: update Plane MCP server to ${{ steps.update.outputs.latest_version }}"
+          title: "chore: update Plane MCP server to ${{ steps.update.outputs.latest_version }}"
+          assignees: ${{ github.repository_owner }}
+          body: |
+            Updates the official Plane MCP server from `${{ steps.update.outputs.current_version }}` to `${{ steps.update.outputs.latest_version }}`.
+
+            Release: ${{ steps.update.outputs.release_url }}
+
+            This automation checks release metadata and the updater's behavior.
+            It does **not** authenticate to Plane or prove that Plane operations still work.
+            No Plane credentials are stored in this repository. This PR is **not** auto-merged.
+
+            Before merging:
+            - [ ] Read the upstream release notes for breaking changes.
+            - [ ] Check out this PR locally and run the following with your private Plane credentials:
+
+            ```bash
+            uv run skills/plane-mcp/scripts/plane.py tools
+            uv run skills/plane-mcp/scripts/plane.py describe project
+            uv run skills/plane-mcp/scripts/plane.py call project '{"action":"list"}'
+            ```
+
+            - [ ] Check any other Plane operations you rely on, then merge manually.
+            - [ ] Synchronize the updated skill to your agent's installed skill directory.
