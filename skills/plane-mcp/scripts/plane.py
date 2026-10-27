@@ -27,7 +27,7 @@ from mcp.types import PaginatedRequestParams
 DEFAULT_SERVER = {
     "type": "stdio",
     "command": "uvx",
-    "args": ["plane-mcp-server==0.3.4", "stdio"],
+    "args": ["plane-mcp-server==0.3.5", "stdio"],
 }
 ENV_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 SECRET_NAME = re.compile(r"key|token|secret|password|authorization|cookie", re.I)
